@@ -4,6 +4,16 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
+# --- دالة الترحيب عند الضغط على /start ---
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_text = (
+        "مرحباً بك في **بوت الجبوري للتحميل** 🚀\n\n"
+        "أرسل لي أي رابط فيديو من (TikTok, Instagram, YouTube, Facebook, X) "
+        "وسأقوم بتحميله لك فوراً بأعلى جودة وبدون إعلانات! 🎬"
+    )
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+
+# --- دالة التحميل والإرسال ---
 async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text
     
@@ -39,9 +49,13 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(file_path)
 
 def main():
+    # ⚠️ استبدل النص أسفله بالـ Token الخاص بك من BotFather
     BOT_TOKEN = "8932218353:AAEOFkZxVbrUt69lZxz1FmT3_Du1RiXoIB8"
     
     application = Application.builder().token(BOT_TOKEN).build()
+    
+    # إضافة معالج أمر start والرسائل
+    application.add_handler(CommandHandler("start", start_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_and_send))
     
     print("البوت يعمل بنجاح...")
