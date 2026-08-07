@@ -1,6 +1,6 @@
 import os
 import asyncio
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
@@ -8,10 +8,33 @@ import yt_dlp
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "مرحباً بك في **بوت الجبوري للتحميل** 🚀\n\n"
-        "أرسل لي أي رابط فيديو من (TikTok, Instagram, YouTube, Facebook, X) "
-        "وسأقوم بتحميله لك فوراً بأعلى جودة وبدون إعلانات! 🎬"
+        "أسرع بوت مجاني وخالي من الإعلانات لتحميل الفيديوهات والوسائط بأعلى جودة!\n\n"
+        "📌 **المنصات المدعومة:**\n"
+        "• تيك توك (TikTok) - بدون علامة مائية\n"
+        "• إنستغرام (Reels & Posts)\n"
+        "• يوتيوب (YouTube Videos & Shorts)\n"
+        "• فيسبوك (Facebook)\n"
+        "• منصة X (تويتر)\n\n"
+        "📥 **كيفية الاستخدام:**\n"
+        "فقط قم بإرسال رابط الفيديو هنا وسأقوم بتحميله لك فوراً!\n\n"
+        "👇 **للتواصل والمتابعة عبر حساباتنا:**"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    
+    # إضافة أزرار شفافة أسفل الرسالة الترحيبية للرابط المباشر
+    keyboard = [
+        [
+            InlineKeyboardButton("📸 حساب الإنستغرام", url="https://instagram.com/n35w"),
+            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/saad_130")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        text=welcome_text, 
+        parse_mode="Markdown", 
+        reply_markup=reply_markup,
+        disable_web_page_preview=True
+    )
 
 # --- دالة التحميل والإرسال ---
 async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
