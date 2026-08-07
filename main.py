@@ -24,7 +24,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton("📸 حساب الإنستغرام", url="https://instagram.com/n35w"),
-            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/saad_130")
+            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/saad106")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
