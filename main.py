@@ -4,27 +4,43 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import yt_dlp
 
-# --- دالة الترحيب عند الضغط على /start ---
+# --- قائمة المعرفات المسموح لها برؤية الإحصائيات (ضع معرفك هنا) ---
+ADMIN_ID = 123456789  # استبدل هذا المعرف بمعرف حسابك الشخصي في تليجرام
+
+def save_user(user_id):
+    """حفظ معرف المستخدم إذا لم يكن موجوداً من قبل"""
+    if not os.path.exists("users.txt"):
+        with open("users.txt", "w") as f:
+            f.write("")
+            
+    with open("users.txt", "r") as f:
+        users = f.read().splitlines()
+        
+    if str(user_id) not in users:
+        with open("users.txt", "a") as f:
+            f.write(f"{user_id}\n")
+
+# --- دالة الترحيب مع حفظ المستخدم ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    save_user(user_id) # حفظ المستخدم جديد
+    
     welcome_text = (
         "مرحباً بك في **بوت الجبوري للتحميل** 🚀\n\n"
         "أسرع بوت مجاني وخالي من الإعلانات لتحميل الفيديوهات والوسائط بأعلى جودة!\n\n"
         "📌 **المنصات المدعومة:**\n"
-        "• تيك توك (TikTok) - بدون علامة مائية\n"
+        "• تيك توك (TikTok)\n"
         "• إنستغرام (Reels & Posts)\n"
         "• يوتيوب (YouTube Videos & Shorts)\n"
         "• فيسبوك (Facebook)\n"
         "• منصة X (تويتر)\n\n"
-        "📥 **كيفية الاستخدام:**\n"
-        "فقط قم بإرسال رابط الفيديو هنا وسأقوم بتحميله لك فوراً!\n\n"
-        "👇 **للتواصل والمتابعة عبر حساباتنا:**"
+        "📥 أرسل رابط الفيديو للبدء!"
     )
     
-    # إضافة أزرار شفافة أسفل الرسالة الترحيبية للرابط المباشر
     keyboard = [
         [
-            InlineKeyboardButton("📸 حساب الإنستغرام", url="https://instagram.com/n35w"),
-            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/saad106")
+            InlineKeyboardButton("📸 حساب الإنستغرام", url="https://instagram.com/ضع_يوزر_الانستغرام"),
+            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/ضع_يوزر_التليجرام")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -35,6 +51,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup,
         disable_web_page_preview=True
     )
+
+# --- دالة عرض الإحصائيات للآدمن فقط ---
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return # عدم الرد إذا لم يكن الآدمن
+        
+    count = 0
+    if os.path.exists("users.txt"):
+        with open("users.txt", "r") as f:
+            count = len(f.read().splitlines())
+            
+    await update.message.reply_text(f"📊 **إحصائيات البوت:**\n\nعدد المستخدمين الإجمالي: **{count}** مشترك")
 
 # --- دالة التحميل والإرسال ---
 async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,13 +100,12 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(file_path)
 
 def main():
-    # ⚠️ استبدل النص أسفله بالـ Token الخاص بك من BotFather
-    BOT_TOKEN = "8932218353:AAEOFkZxVbrUt69lZxz1FmT3_Du1RiXoIB8"
+    BOT_TOKEN = "ضع_التوكين_الخاص_بك_هنا"
     
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # إضافة معالج أمر start والرسائل
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("stats", stats_command)) # أمر الإحصائيات
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_and_send))
     
     print("البوت يعمل بنجاح...")
