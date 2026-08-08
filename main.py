@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import yt_dlp
 
 # --- قائمة المعرفات المسموح لها برؤية الإحصائيات (ضع معرفك هنا) ---
-ADMIN_ID = 123456789  # استبدل هذا المعرف بمعرف حسابك الشخصي في تليجرام
+ADMIN_ID = 281448266  # استبدل هذا المعرف بمعرف حسابك الشخصي في تليجرام
 
 def save_user(user_id):
     """حفظ معرف المستخدم إذا لم يكن موجوداً من قبل"""
@@ -39,8 +39,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [
-            InlineKeyboardButton("📸 حساب الإنستغرام", url="https://instagram.com/ضع_يوزر_الانستغرام"),
-            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/ضع_يوزر_التليجرام")
+            InlineKeyboardButton("📸 حساب الإنستغرام", url="https://instagram.com/n35w"),
+            InlineKeyboardButton("📢 قناة التليجرام", url="https://t.me/saad106")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -100,7 +100,7 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(file_path)
 
 def main():
-    BOT_TOKEN = "ضع_التوكين_الخاص_بك_هنا"
+    BOT_TOKEN = "8932218353:AAEOFkZxVbrUt69lZxz1FmT3_Du1RiXoIB8"
     
     application = Application.builder().token(BOT_TOKEN).build()
     
