@@ -1,2 +1,2 @@
-python-telegram-bot
-yt-dlp
+python-telegram-bot>=22.0,<23.0
+yt-dlp[default]>=2026.8.19
