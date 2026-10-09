@@ -9,75 +9,92 @@ import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
+    ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
     filters,
 )
-from telegram.error import TelegramError
+from telegram.error import TelegramError, Conflict, NetworkError
 
-# ==================================================
-# الإعدادات
-# ==================================================
+# =====================================================
+# إعدادات البوت
+# =====================================================
 
 ADMIN_ID = 281448266
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
-# الحد التقريبي لحجم الملف المرسل إلى تيليجرام
-MAX_FILE_SIZE = 49 * 1024 * 1024
-
 BASE_DIR = Path(__file__).resolve().parent
 USERS_FILE = BASE_DIR / "users.txt"
 
+# حد احترازي لحجم الملف قبل إرساله عبر تيليجرام
+MAX_FILE_SIZE = 49 * 1024 * 1024
+
 logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 logger = logging.getLogger("AlJubouriSaveBot")
 
 
-# ==================================================
+# =====================================================
 # إدارة المستخدمين
-# ==================================================
-
-def save_user(user_id: int) -> None:
-    """حفظ معرف المستخدم مرة واحدة."""
-    try:
-        USERS_FILE.touch(exist_ok=True)
-
-        with USERS_FILE.open("r", encoding="utf-8") as file:
-            users = {line.strip() for line in file if line.strip()}
-
-        user_id_text = str(user_id)
-
-        if user_id_text not in users:
-            with USERS_FILE.open("a", encoding="utf-8") as file:
-                file.write(f"{user_id_text}\n")
-
-    except OSError:
-        logger.exception("تعذر حفظ المستخدم في users.txt")
-
+# =====================================================
 
 def get_users() -> list[str]:
-    """قراءة قائمة المستخدمين."""
     try:
         USERS_FILE.touch(exist_ok=True)
 
         with USERS_FILE.open("r", encoding="utf-8") as file:
-            return list({
+            return sorted({
                 line.strip()
                 for line in file
                 if line.strip().isdigit()
             })
 
     except OSError:
-        logger.exception("تعذرت قراءة users.txt")
+        logger.exception("تعذرت قراءة قائمة المستخدمين")
         return []
 
 
-# ==================================================
-# الأوامر الأساسية
-# ==================================================
+def save_user(user_id: int) -> None:
+    try:
+        user_id_text = str(user_id)
+        users = set(get_users())
+
+        if user_id_text not in users:
+            with USERS_FILE.open("a", encoding="utf-8") as file:
+                file.write(f"{user_id_text}\n")
+
+    except OSError:
+        logger.exception("تعذر حفظ المستخدم")
+
+
+# =====================================================
+# تهيئة استقبال تحديثات تيليجرام
+# =====================================================
+
+async def post_init(application: Application) -> None:
+    """
+    إزالة Webhook القديم قبل بدء Polling.
+    لا تستخدم Webhook وPolling في الوقت نفسه.
+    """
+    try:
+        await application.bot.delete_webhook(
+            drop_pending_updates=False
+        )
+        logger.info("تم التحقق من Webhook وتجهيز Polling.")
+
+    except Exception:
+        logger.exception(
+            "تعذر حذف Webhook. تحقق من التوكن واتصال تيليجرام."
+        )
+        raise
+
+
+# =====================================================
+# /start
+# =====================================================
 
 async def start_command(
     update: Update,
@@ -91,12 +108,13 @@ async def start_command(
 
     save_user(user.id)
 
-    welcome_text = (
+    text = (
         "مرحباً بك في بوت الجبوري للتحميل 🚀\n\n"
-        "أرسل رابط فيديو من إحدى المنصات المدعومة "
-        "وسأحاول تحميله وإرساله إليك.\n\n"
-        "ملاحظة: بعض الروابط قد تتطلب تسجيل الدخول "
-        "أو قد تكون غير متاحة للتحميل."
+        "أرسل رابط فيديو وسأحاول تحميله وإرساله إليك.\n\n"
+        "يدعم البوت المواقع التي تستطيع أداة التحميل "
+        "التعرف عليها والوصول إلى محتواها.\n\n"
+        "ملاحظة: بعض الفيديوهات قد تكون خاصة أو تتطلب "
+        "تسجيل الدخول أو تكون محجوبة من الاستضافة."
     )
 
     keyboard = [
@@ -113,10 +131,14 @@ async def start_command(
     ]
 
     await message.reply_text(
-        welcome_text,
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
+
+# =====================================================
+# /stats
+# =====================================================
 
 async def stats_command(
     update: Update,
@@ -131,12 +153,14 @@ async def stats_command(
     if user.id != ADMIN_ID:
         return
 
-    users = get_users()
-
     await message.reply_text(
-        f"📊 عدد المستخدمين المسجلين: {len(users)}"
+        f"📊 عدد المستخدمين المسجلين: {len(get_users())}"
     )
 
+
+# =====================================================
+# /broadcast
+# =====================================================
 
 async def broadcast_command(
     update: Update,
@@ -166,12 +190,13 @@ async def broadcast_command(
         return
 
     broadcast_text = " ".join(context.args)
+
     status = await message.reply_text(
-        f"⏳ جاري إرسال الرسالة إلى {len(users)} مستخدم..."
+        f"⏳ جارٍ إرسال الرسالة إلى {len(users)} مستخدم..."
     )
 
-    success_count = 0
-    failed_count = 0
+    success = 0
+    failed = 0
 
     for user_id in users:
         try:
@@ -179,58 +204,61 @@ async def broadcast_command(
                 chat_id=int(user_id),
                 text=broadcast_text,
             )
-            success_count += 1
+            success += 1
             await asyncio.sleep(0.1)
 
         except TelegramError as error:
-            failed_count += 1
+            failed += 1
             logger.warning(
-                "فشل إرسال البث إلى المستخدم %s: %s",
+                "تعذر إرسال البث إلى %s: %s",
                 user_id,
                 error,
             )
 
-        except Exception:
-            failed_count += 1
-            logger.exception("خطأ غير متوقع أثناء البث")
-
     await status.edit_text(
         "✅ انتهى البث.\n"
-        f"نجح الإرسال: {success_count}\n"
-        f"تعذر الإرسال: {failed_count}"
+        f"نجح الإرسال: {success}\n"
+        f"تعذر الإرسال: {failed}"
     )
 
 
-# ==================================================
-# تنزيل الفيديو
-# ==================================================
+# =====================================================
+# التحقق من الروابط
+# =====================================================
 
 def is_valid_url(url: str) -> bool:
-    """التأكد من أن النص رابط HTTP أو HTTPS."""
     try:
         parsed = urlparse(url.strip())
+
         return (
             parsed.scheme in ("http", "https")
             and bool(parsed.netloc)
         )
+
     except ValueError:
         return False
 
 
-def download_video(url: str, output_dir: str) -> tuple[str, str]:
+# =====================================================
+# تنزيل الوسائط باستخدام yt-dlp
+# =====================================================
+
+def download_media(url: str, directory: str) -> tuple[str, str]:
     """
-    تنزيل الفيديو داخل مجلد مؤقت.
-    تُنفّذ هذه الدالة خارج حلقة أحداث تيليجرام.
+    دالة متزامنة؛ سيتم تشغيلها داخل خيط منفصل
+    كي لا يتوقف البوت عن الاستجابة أثناء التنزيل.
     """
 
     options = {
-        # محاولة اختيار صيغة فيديو متوافقة دون دمج مسارات متعددة
         "format": (
             "best[ext=mp4][filesize<49000000]/"
             "best[filesize<49000000]/"
             "best[ext=mp4]/best"
         ),
-        "outtmpl": os.path.join(output_dir, "%(id)s.%(ext)s"),
+        "outtmpl": os.path.join(
+            directory,
+            "%(id)s.%(ext)s",
+        ),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": False,
@@ -238,49 +266,58 @@ def download_video(url: str, output_dir: str) -> tuple[str, str]:
         "fragment_retries": 2,
         "socket_timeout": 30,
         "cachedir": False,
-        # تمكين تنزيل مكونات EJS من GitHub عند الحاجة
-        "remote_components": ["ejs:github"],
     }
 
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=True)
 
         if not info:
-            raise RuntimeError("لم تُرجع أداة التحميل معلومات الفيديو.")
+            raise RuntimeError(
+                "لم يتمكن yt-dlp من استخراج معلومات الفيديو."
+            )
 
         title = info.get("title") or "فيديو"
 
-        requested_downloads = info.get("requested_downloads") or []
         candidates = []
 
-        for item in requested_downloads:
+        for item in info.get("requested_downloads") or []:
             filepath = item.get("filepath")
+
             if filepath and os.path.isfile(filepath):
                 candidates.append(filepath)
 
         if not candidates:
             prepared_path = ydl.prepare_filename(info)
+
             if os.path.isfile(prepared_path):
                 candidates.append(prepared_path)
 
         if not candidates:
             candidates = [
                 str(path)
-                for path in Path(output_dir).iterdir()
+                for path in Path(directory).iterdir()
                 if path.is_file()
-                and not path.name.endswith((".part", ".ytdl"))
+                and not path.name.endswith(
+                    (".part", ".ytdl", ".tmp")
+                )
             ]
 
         if not candidates:
             raise FileNotFoundError(
-                "اكتمل طلب التنزيل، لكن لم يُعثر على ملف الفيديو."
+                "لم يتم العثور على ملف بعد محاولة التنزيل."
             )
 
-        # اختيار أكبر ملف مرشح باعتباره ملف الوسائط
         file_path = max(candidates, key=os.path.getsize)
+
+        if os.path.getsize(file_path) == 0:
+            raise RuntimeError("الملف الذي تم تنزيله فارغ.")
 
         return file_path, title
 
+
+# =====================================================
+# إرسال الفيديو للمستخدم
+# =====================================================
 
 async def download_and_send(
     update: Update,
@@ -301,118 +338,165 @@ async def download_and_send(
     )
 
     try:
-        with tempfile.TemporaryDirectory(prefix="jubouri_") as temp_dir:
-            # تشغيل yt-dlp في خيط منفصل حتى لا يتوقف البوت عن الاستجابة
+        # المجلد المؤقت يُحذف تلقائيًا بعد انتهاء الإرسال
+        with tempfile.TemporaryDirectory(
+            prefix="jubouri_"
+        ) as temp_dir:
+
             file_path, title = await asyncio.to_thread(
-                download_video,
+                download_media,
                 url,
                 temp_dir,
             )
 
-            file_size = os.path.getsize(file_path)
+            size = os.path.getsize(file_path)
 
-            if file_size == 0:
-                raise RuntimeError("الملف الذي تم تنزيله فارغ.")
-
-            if file_size > MAX_FILE_SIZE:
+            if size > MAX_FILE_SIZE:
                 await status.edit_text(
-                    "⚠️ تم تنزيل الفيديو، لكن حجمه أكبر من الحد "
-                    "الذي يستطيع البوت إرساله حاليًا.\n"
-                    "جرّب رابطًا آخر أو فيديو أقصر."
+                    "⚠️ تم العثور على الفيديو، لكن حجمه أكبر "
+                    "من الحد الاحترازي للإرسال.\n"
+                    "جرّب فيديو أقصر أو أقل حجمًا."
                 )
                 return
 
-            await status.edit_text("📤 اكتمل التنزيل، جارٍ الإرسال...")
+            await status.edit_text("📤 تم التنزيل، جارٍ الإرسال...")
+
+            # إرسال MP4 كفيديو، والأنواع الأخرى كملف
+            suffix = Path(file_path).suffix.lower()
 
             with open(file_path, "rb") as media:
-                await message.reply_video(
-                    video=media,
-                    caption=f"✅ {title[:800]}",
-                    supports_streaming=True,
-                    read_timeout=120,
-                    write_timeout=120,
-                    connect_timeout=30,
-                    pool_timeout=30,
-                )
+                if suffix == ".mp4":
+                    await message.reply_video(
+                        video=media,
+                        caption=f"✅ {title[:800]}",
+                        supports_streaming=True,
+                        read_timeout=120,
+                        write_timeout=120,
+                        connect_timeout=30,
+                        pool_timeout=30,
+                    )
+                else:
+                    await message.reply_document(
+                        document=media,
+                        caption=f"✅ {title[:800]}",
+                        read_timeout=120,
+                        write_timeout=120,
+                        connect_timeout=30,
+                        pool_timeout=30,
+                    )
 
-            await status.delete()
+        await status.delete()
 
     except Exception as error:
-        # تسجيل التفاصيل في Logs دون كشفها للمستخدم
-        logger.exception("فشل تحميل الرابط: %s", url)
+        logger.exception("فشل تنزيل الرابط: %s", url)
 
         error_text = str(error).lower()
 
-        if "sign in to confirm" in error_text or "not a bot" in error_text:
-            user_message = (
-                "⚠️ يوتيوب يطلب التحقق من الطلب.\n"
-                "جرّب رابطًا عامًا آخر. تحديث المكتبات وحده "
-                "لا يضمن حل هذا النوع من القيود."
-            )
-
-        elif "private" in error_text or "login" in error_text:
-            user_message = (
-                "🔒 هذا الفيديو خاص أو يتطلب تسجيل الدخول، "
-                "ولم يتمكن البوت من الوصول إليه."
+        if (
+            "sign in to confirm" in error_text
+            or "not a bot" in error_text
+        ):
+            reply = (
+                "⚠️ المنصة تطلب التحقق من الطلب الآلي. "
+                "جرّب رابطًا عامًا آخر؛ وقد لا يكفي تحديث المكتبات "
+                "لحل هذه القيود."
             )
 
         elif (
             "unsupported url" in error_text
             or "no suitable extractor" in error_text
         ):
-            user_message = (
-                "❌ لا يستطيع yt-dlp التعرف على هذا الرابط حاليًا. "
+            reply = (
+                "❌ لم يتمكن محرك التحميل من التعرف على هذا الرابط. "
                 "قد تكون المنصة غير مدعومة أو غيّرت طريقة عرض الفيديو."
             )
 
-        elif "too large" in error_text or "request entity too large" in error_text:
-            user_message = (
-                "⚠️ حجم الفيديو أكبر من الحد المسموح بإرساله."
+        elif (
+            "private" in error_text
+            or "login required" in error_text
+            or "authentication" in error_text
+        ):
+            reply = (
+                "🔒 يبدو أن الفيديو خاص أو يتطلب تسجيل الدخول "
+                "ولا يمكن الوصول إليه حاليًا."
+            )
+
+        elif (
+            "timed out" in error_text
+            or "timeout" in error_text
+            or "network" in error_text
+        ):
+            reply = (
+                "🌐 تعذر الاتصال بالمنصة. قد تكون هناك مشكلة "
+                "مؤقتة في الشبكة أو قيود من الاستضافة."
             )
 
         else:
-            user_message = (
-                "❌ تعذر تحميل الفيديو.\n"
-                "سجّل الخطأ في Logs، وجرّب رابطًا عامًا آخر."
+            reply = (
+                "❌ فشل تحميل الرابط.\n"
+                "تم تسجيل تفاصيل الخطأ في Logs لتشخيصه."
             )
 
         try:
-            await status.edit_text(user_message)
+            await status.edit_text(reply)
         except TelegramError:
             logger.exception("تعذر تحديث رسالة حالة التحميل")
 
 
-# ==================================================
-# معالجة الأخطاء العامة
-# ==================================================
+# =====================================================
+# معالجة أخطاء تيليجرام العامة
+# =====================================================
 
 async def error_handler(
     update: object,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    logger.error(
-        "حدث خطأ أثناء معالجة تحديث تيليجرام",
-        exc_info=context.error,
-    )
+    error = context.error
+
+    if isinstance(error, Conflict):
+        logger.critical(
+            "تعارض في استقبال تحديثات تيليجرام. "
+            "تأكد من عدم تشغيل نسخة أخرى، ومن عدم إعادة "
+            "تفعيل Webhook بواسطة خدمة أخرى."
+        )
+
+    elif isinstance(error, NetworkError):
+        logger.warning("خطأ اتصال بتيليجرام: %s", error)
+
+    else:
+        logger.error(
+            "حدث خطأ أثناء معالجة تحديث تيليجرام",
+            exc_info=error,
+        )
 
 
-# ==================================================
-# تشغيل البوت
-# ==================================================
+# =====================================================
+# إنشاء التطبيق وتشغيله
+# =====================================================
 
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError(
             "متغير البيئة TELEGRAM_BOT_TOKEN غير موجود. "
-            "أضف توكن البوت في إعدادات متغيرات البيئة في FadeHost."
+            "أضف توكن البوت في إعدادات FadeHost."
         )
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("broadcast", broadcast_command))
-
+    application.add_handler(
+        CommandHandler("start", start_command)
+    )
+    application.add_handler(
+        CommandHandler("stats", stats_command)
+    )
+    application.add_handler(
+        CommandHandler("broadcast", broadcast_command)
+    )
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -422,8 +506,9 @@ def main() -> None:
 
     application.add_error_handler(error_handler)
 
-    logger.info("AlJubouriSaveBot is starting...")
+    logger.info("AlJubouriSaveBot starting...")
 
+    # run_polling يدير دورة حياة التطبيق ويبدأ استقبال التحديثات
     application.run_polling(
         drop_pending_updates=False,
         allowed_updates=Update.ALL_TYPES,
